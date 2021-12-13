@@ -1,0 +1,55 @@
+import pandas as pd   
+import numpy as np
+from bs4 import BeautifulSoup   
+import re 
+import nltk
+from nltk.corpus import stopwords
+from sklearn.feature_extraction.text import CountVectorizer
+from sklearn.ensemble import RandomForestClassifier
+
+#读取所需的训练集和测试集的数据
+train = pd.read_csv("..\\labeledTrainData.tsv.zip", header=0, delimiter="\t", quoting=3)
+test = pd.read_csv("..\\testData.tsv.zip", header=0, delimiter="\t", quoting=3 )
+
+#去除html标签和标点符号中的文本
+def review_to_words( raw_review ):
+    review_text = BeautifulSoup(raw_review).get_text()      
+    letters_only = re.sub("[^a-zA-Z]", " ", review_text) 
+    words = letters_only.lower().split()                             
+    stops = set(stopwords.words("english"))                  
+    meaningful_words = [w for w in words if not w in stops]   
+    return( " ".join( meaningful_words ))  
+
+#处理选中的所有文本
+clean_train_reviews = []
+for i in range(0, train["review"].size):
+    if (i+1)%1000 == 0:
+        print(i+1)
+    clean_train_reviews.append(review_to_words(train["review"][i] ) )
+
+#从训练集中获取所有特征向量
+vectorizer = CountVectorizer(max_features = 5000) 
+
+train_data_features = vectorizer.fit_transform(clean_train_reviews)
+
+train_data_features = train_data_features.toarray()
+
+#使用随机森林训练模型，对测试样本进行测试
+forest = RandomForestClassifier(n_estimators = 200) 
+forest = forest.fit( train_data_features, train["sentiment"] )
+num_reviews = len(test["review"])
+clean_test_reviews = [] 
+
+for i in range(0,num_reviews):
+    clean_review = review_to_words( test["review"][i] )
+    clean_test_reviews.append( clean_review )
+
+
+test_data_features = vectorizer.transform(clean_test_reviews)
+test_data_features = test_data_features.toarray()
+
+result = forest.predict(test_data_features)
+
+output = pd.DataFrame( data={"id":test["id"], "sentiment":result} )
+
+output.to_csv( "submission.csv", index=False, quoting=3 )
